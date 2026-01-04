@@ -105,13 +105,25 @@ int find_active_voice(uint8_t m_ch, uint8_t m_note) {
 // --- AUDIO HELPERS ---
 void apply_velocity(uint8_t channel, uint8_t velocity) {
     if (channel > 8) return;
+    
+    // Get the original patch carrier KSL/TL
     uint8_t base_ksl = shadow_carrier_ksl[channel];
-    uint8_t base_tl  = base_ksl & 0x3F;
-    uint8_t ksl_bits = base_ksl & 0xC0;
-    uint8_t attenuation = (127 - velocity) >> 1;
-    uint8_t final_tl = base_tl + attenuation;
+    uint8_t base_tl  = base_ksl & 0x3F;      // Original TL from patch
+    uint8_t ksl_bits = base_ksl & 0xC0;      // KSL bits
+    
+    // Convert MIDI velocity (0-127) to OPL attenuation (0-63)
+    // Higher velocity = less attenuation (louder)
+    // Lower velocity = more attenuation (quieter)
+    uint8_t velocity_attenuation = (127 - velocity) >> 1;
+    
+    // Combine: base TL + velocity attenuation
+    // This gives us dynamic range based on MIDI velocity
+    uint8_t final_tl = base_tl + velocity_attenuation;
+    
+    // Clamp to valid OPL range
     if (final_tl > 63) final_tl = 63;
     
+    // Write to carrier TL register
     uint8_t offsets[9] = {0, 1, 2, 8, 9, 10, 16, 17, 18};
     opl2_write(0x43 + offsets[channel], ksl_bits | final_tl);
 }
@@ -152,7 +164,7 @@ void core1_entry() {
                     load_gm_instrument(voice, prog);
                 }
 
-                // 3. Play
+                // 3. Play - Use actual MIDI velocity now that patches have proper headroom
                 apply_velocity(voice, event.velocity);
                 opl2_note_on(voice, event.note);
                 break;
@@ -218,6 +230,7 @@ int main() {
     
     opl2_clear();
     opl2_write(0x01, 0x20); // Enable Waveform Select
+    opl2_write(0xBD, 0x00); // Ensure Melodic Mode
 
     // Load default instruments
     for(int i=0; i<9; i++) load_gm_instrument(i, 0);

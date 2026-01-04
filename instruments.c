@@ -143,8 +143,8 @@ const OPL_Patch drum_hihat = { .m_ave=0x05, .m_ksl=0x00, .m_atdec=0xF0, .m_susre
 uint8_t shadow_carrier_ksl[9] = {0};
 
 // Global volume attenuation (0-63, where 0=loudest, 63=quietest)
-// Start with 12dB attenuation to prevent clipping
-#define GLOBAL_VOLUME_ATTENUATION 12
+// NOTE: Setting this to non-zero makes sounds tiny and doesn't fix distortion
+#define GLOBAL_VOLUME_ATTENUATION 0
 
 void write_patch_to_channel(uint8_t ch, const OPL_Patch* p) {
     if (ch > 8) return;
@@ -162,15 +162,14 @@ void write_patch_to_channel(uint8_t ch, const OPL_Patch* p) {
     opl2_write(0x80 + off, p->m_susrel);
     opl2_write(0xE0 + off, p->m_wave);
 
-    // Apply global volume attenuation to CARRIER TL
+    // Save CARRIER KSL/TL with global attenuation already applied
+    // This becomes the BASE for velocity scaling
     uint8_t c_tl = (p->c_ksl & 0x3F) + GLOBAL_VOLUME_ATTENUATION;
     if (c_tl > 63) c_tl = 63;
-    
-    // Save attenuated base KSL for Velocity Scaling
     shadow_carrier_ksl[ch] = (p->c_ksl & 0xC0) | c_tl;
 
     opl2_write(0x23 + off, p->c_ave);
-    opl2_write(0x43 + off, (p->c_ksl & 0xC0) | c_tl);
+    opl2_write(0x43 + off, shadow_carrier_ksl[ch]);  // Use the shadow value
     opl2_write(0x63 + off, p->c_atdec);
     opl2_write(0x83 + off, p->c_susrel);
     opl2_write(0xE3 + off, p->c_wave);
