@@ -43,6 +43,7 @@ instruments.c
 voice_manager.c
 midi_state.c
 audio_engine.c
+song_player.c
 )
 
 pico_set_program_name(PicoOPL2 "PicoOPL2")
