@@ -52,45 +52,50 @@ Create `voice_manager.c` and `voice_manager.h`:
 
 ---
 
-### 1.3 Extract MIDI Channel State Management
+### 1.3 Extract MIDI Channel State Management ✅
 **Goal:** Separate MIDI program tracking
 
 Create `midi_state.c` and `midi_state.h`:
 
-- [ ] Move `midi_ch_program[16]` array
-- [ ] Create `midi_state_init()` function
-- [ ] Create `midi_set_program(channel, program)` function
-- [ ] Create `midi_get_program(channel)` function
-- [ ] Add proper header guards and includes
+- [x] Move `midi_ch_program[16]` array
+- [x] Create `midi_state_init()` function
+- [x] Create `midi_set_program(channel, program)` function
+- [x] Create `midi_get_program(channel)` function
+- [x] Add proper header guards and includes
 
-**Files to create:**
-- midi_state.c
-- midi_state.h
+**Status:** ✅ COMPLETE
 
-**Files to modify:**
-- PicoOPL2.c (remove moved code, add include)
-- CMakeLists.txt (add midi_state.c)
+**Files created:**
+- midi_state.c - MIDI channel program state management
+- midi_state.h - Public interface for MIDI state
+
+**Files modified:**
+- PicoOPL2.c (removed array, replaced with function calls)
+- CMakeLists.txt (added midi_state.c)
 
 ---
 
-### 1.4 Extract Audio Engine to Separate Module
+### 1.4 Extract Audio Engine to Separate Module ✅
 **Goal:** Move Core 1 audio processing logic
 
 Create `audio_engine.c` and `audio_engine.h`:
 
-- [ ] Move `event_queue` declaration
-- [ ] Move `core1_entry()` function
-- [ ] Create `audio_engine_init()` function
-- [ ] Create `audio_engine_start()` function (launches Core 1)
-- [ ] Add proper header guards and includes
+- [x] Move `event_queue` declaration
+- [x] Move `core1_entry()` function
+- [x] Create `audio_engine_init()` function
+- [x] Create `audio_engine_start()` function (launches Core 1)
+- [x] Create `audio_engine_add_event()` function
+- [x] Add proper header guards and includes
 
-**Files to create:**
-- audio_engine.c
-- audio_engine.h
+**Status:** ✅ COMPLETE
 
-**Files to modify:**
-- PicoOPL2.c (remove moved code, add include)
-- CMakeLists.txt (add audio_engine.c)
+**Files created:**
+- audio_engine.c - Core 1 audio processing implementation
+- audio_engine.h - Public interface for audio engine
+
+**Files modified:**
+- PicoOPL2.c (removed ~70 lines of audio engine code)
+- CMakeLists.txt (added audio_engine.c)
 
 ---
 

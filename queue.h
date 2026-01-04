@@ -8,7 +8,7 @@
 // Used by: 
 // 1. Python Script (generates arrays of this)
 // 2. Queue (passes these between cores)
-// 3. RP6502 (sends these bytes over the wire)
+// 3. Audio Engine (processes MIDI events)
 
 typedef struct {
     uint8_t type;      // 1=NoteOn, 0=NoteOff, 3=PatchChange
@@ -17,9 +17,5 @@ typedef struct {
     uint8_t note;      // MIDI Note (0-127) or Program Number
     uint8_t velocity;  // 0-127 (Volume Dynamics)
 } SongEvent;
-
-// --- The Queue Handle ---
-// Defined in main.c, accessible everywhere
-extern queue_t event_queue;
 
 #endif // QUEUE_H

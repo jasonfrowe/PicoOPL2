@@ -6,69 +6,10 @@
 #include "opl2.h"
 #include "instruments.h"
 #include "voice_manager.h"
+#include "midi_state.h"
+#include "audio_engine.h"
 #include "queue.h"
 #include "song_data.h"
-
-// Track the current Instrument assigned to each MIDI Channel
-uint8_t midi_ch_program[16] = {0};
-
-queue_t event_queue;
-
-// --- CORE 1: THE AUDIO ENGINE ---
-void core1_entry() {
-    SongEvent event;
-    init_voices();
-    
-    while (true) {
-        queue_remove_blocking(&event_queue, &event);
-            
-        if (event.delay_ms > 0) sleep_ms(event.delay_ms);
-
-        switch (event.type) {
-            case 0: // Note Off
-            {
-                int voice = find_active_voice(event.channel, event.note);
-                if (voice != -1) {
-                    opl2_note_off(voice);
-                    voices[voice].active = false;
-                }
-                break;
-            }
-
-            case 1: // Note On
-            {
-                // 1. Allocate Voice
-                int voice = allocate_voice(event.channel, event.note);
-                
-                // 2. Load Instrument
-                if (event.channel == 9) { // MIDI DRUMS
-                    load_drum_patch(voice, event.note);
-                } 
-                else {
-                    // MELODIC
-                    uint8_t prog = midi_ch_program[event.channel];
-                    load_gm_instrument(voice, prog);
-                }
-
-                // 3. Play - Use actual MIDI velocity now that patches have proper headroom
-                apply_velocity(voice, event.velocity);
-                opl2_note_on(voice, event.note);
-                break;
-            }
-
-            case 3: // Program Change
-                if (event.channel < 16) {
-                    midi_ch_program[event.channel] = event.note;
-                }
-                break;
-                
-            case 2: // Reset
-                for(int i=0; i<9; i++) opl2_note_off(i);
-                init_voices();
-                break;
-        }
-    }
-}
 
 // --- MAIN ---
 int main() {
@@ -92,8 +33,8 @@ int main() {
     load_drum_patch(8, 36);
 
     // Start Engine
-    queue_init(&event_queue, sizeof(SongEvent), 512);
-    multicore_launch_core1(core1_entry);
+    audio_engine_init(512);
+    audio_engine_start();
 
     // --- INTERNAL SONG PLAYER ---
     while(true) {
@@ -107,11 +48,11 @@ int main() {
             if (e.type == 2) {
                 // End of song marker - Send Reset
                 SongEvent reset = { .type=2, .delay_ms=0 };
-                queue_add_blocking(&event_queue, &reset);
+                audio_engine_add_event(&reset);
                 break;
             }
             
-            queue_add_blocking(&event_queue, &e);
+            audio_engine_add_event(&e);
         }
         
         printf("Song Done. Restarting in 2s...\n");
