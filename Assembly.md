@@ -1,161 +1,104 @@
-### 1. Updated PARTS.md
-Add this to your existing list. I've selected a standard size that is easy to panel-mount.
+# 🎹 Pico OPL2 Synth: Master Wiring & Parts Guide
 
+## 1. Integrated Power & Charging System
+This system allows the synth to run off a **12V DC Jack**, charge the **2S Battery (8.4V)**, and automatically switch to battery power without a reboot.
+
+### A. Parts List (Power Section)
 | Component | Qty | Description | Notes |
 | :--- | :--- | :--- | :--- |
-| **Rocker Switch** | 1 | SPST (On-Off) Snap-in | [Mouser: 691-R13-112A-02-BB] or any standard 2-pin rocker. |
-| **P-Channel MOSFET** | 1 | IRLML6402 or IRF4905 | For the Power Path (Battery disconnect). |
-| **Schottky Diode** | 1 | 1N5822 (3A) | To prevent back-feeding the DC Jack from the battery. |
-| **100kΩ Resistor** | 1 | Pull-down Resistor | For the MOSFET Gate. |
+| **Rocker Switch** | 1 | SPST (On-Off) | Master power for the Buck Converter. |
+| **TP5100 Module** | 1 | 2S Li-ion Charger | Solder "SET" bridge for 8.4V mode. |
+| **BMS Board** | 1 | 2S 18650 Protection | Essential for battery safety. |
+| **LM2596 Buck** | 1 | DC-DC Step Down | Set output to **5.0V**. |
+| **IRF4905** | 1 | P-Channel MOSFET | Battery "Gatekeeper" (Power Path). |
+| **1N5822 Diode** | 1 | 3A Schottky | Prevents back-feeding the DC Jack. |
+| **100kΩ Resistor** | 1 | Pull-down | For the MOSFET Gate. |
 
----
-
-### 2. Updated WIRING.md (Power Section)
-The switch is placed **after** the power selection logic but **before** the Buck Converter. This ensures the batteries can charge even when the synth is "OFF," but the Buck Converter won't drain your batteries when the switch is flipped.
-
-#### A. Integrated Power Path & Switch Logic
+### B. Power Path & Switch Wiring
 1.  **DC Jack (12V Input):**
-    *   **Positive (+):** Connects to **TP5100 VIN+** AND the **Anode** of the 1N5822 Diode.
-2.  **Power Selection (Automatic Switch):**
-    *   **1N5822 Cathode:** Connects to **Terminal A** of your Rocker Switch.
-    *   **IRF4905 MOSFET Drain (Pin 3):** ALSO connects to **Terminal A** of your Rocker Switch.
+    *   **Positive (+):** Connect to **TP5100 VIN+** AND **Anode** of 1N5822 Diode.
+2.  **Power Selection Logic:**
+    *   **1N5822 Cathode:** Connect to **Terminal A** of Rocker Switch.
+    *   **IRF4905 Drain (Pin 3):** Connect to **Terminal A** of Rocker Switch.
 3.  **The Master Switch:**
-    *   **Terminal B** of your Rocker Switch: Connects to the **LM2596 Input+**.
+    *   **Terminal B** of Rocker Switch: Connect to **LM2596 Input+**.
 4.  **Battery Path Control:**
-    *   **IRF4905 Source (Pin 2):** Connects to **BMS P+** (Battery Positive).
-    *   **IRF4905 Gate (Pin 1):** Connects to the **DC Jack Positive (+)** (upstream of the diode).
-    *   **100kΩ Resistor:** Connects from **IRF4905 Gate (Pin 1)** to **Ground**.
-
-> **The Result:** 
-> *   **If Plugged In:** 12V hits the MOSFET Gate, turning the battery path **OFF**. The synth runs on 12V.
-> *   **If Unplugged:** The 100k resistor pulls the Gate to Ground, turning the battery path **ON**.
-> *   **The Switch:** In both cases, the Rocker Switch acts as a "Gatekeeper" for the Buck Converter. Flipping it to OFF stops all current to the Pico/OPL2/Amp, but the TP5100 charger stays connected to the batteries for charging.
+    *   **IRF4905 Source (Pin 2):** Connect to **BMS P+** (Battery Positive).
+    *   **IRF4905 Gate (Pin 1):** Connect to **DC Jack Positive (+)** (upstream of diode).
+    *   **100kΩ Resistor:** Connect from **IRF4905 Gate** to **Ground**.
 
 ---
 
-### 3. Understanding the 9V vs 12V Choice
-You mentioned having a **9V DC Jack**. While 9V *can* work, **12V is highly recommended** for this specific 2S (8.4V) battery setup:
-*   **Charging Headroom:** The TP5100 charger needs the input voltage to be at least 1-2V higher than the battery voltage (8.4V) to charge efficiently. 9V is "on the edge" and might not fully charge the batteries.
-*   **Voltage Drops:** The 1N5822 diode and the wires cause small voltage drops. Starting with 12V ensures that even after those drops, your Buck Converter has plenty of "pressure" to create a clean 5V output for the audio amp.
+## 2. Main Logic Master Pinout (Pico)
+This layout resolves all previous conflicts. **Note:** The Data Bus is shifted to **GP2–GP9** to keep **GP1** free for MIDI.
+
+| Pico Pin | Function | Peripheral | Notes |
+| :--- | :--- | :--- | :--- |
+| **GP0** | **OPL2 A0** | YM3812 Pin 4 | Address/Data Select |
+| **GP1** | **MIDI RX** | 6N138 Pin 6 | UART0 RX |
+| **GP2–GP9** | **Data Bus** | YM3812 D0–D7 | **Shifted Bus (Bitmask: 0x3FC)** |
+| **GP10** | **OPL2 WR** | YM3812 Pin 5 | Write Enable (Active Low) |
+| **GP11** | **OPL2 CS** | YM3812 Pin 7 | Chip Select (Active Low) |
+| **GP12** | **I2C0 SDA** | LCD Backpack | Use Level Shifter (BOB-12009) |
+| **GP13** | **I2C0 SCL** | LCD Backpack | Use Level Shifter (BOB-12009) |
+| **GP14** | **Encoder A** | Rotary Encoder | Phase A |
+| **GP15** | **Encoder B** | Rotary Encoder | Phase B |
+| **GP16** | **Encoder SW** | Rotary Encoder | Push Button Select |
+| **GP17** | **OPL2 IC** | YM3812 Pin 3 | Initial Clear (Reset) |
+| **GP21** | **OPL2 Clock** | YM3812 Pin 24 | 3.57MHz PWM Out |
+| **GP30** | **RUN** | Reset Button | Connect to Button $\rightarrow$ GND |
 
 ---
 
-### 4. Audio Path Upgrade: NE5532P
-You asked if the **NE5532P** replaces all LM358s. **Yes.**
-*   **Buffer/Filter Stage:** Use one NE5532P (Dual) for the OPL2 output buffer.
-*   **Mixer Stage:** Use the second NE5532P (Dual) for the Line-In mixing and final gain stage.
-*   **Headroom:** Since the NE5532P is not "Rail-to-Rail," it won't work well if your battery drops too low. However, because you are using a **Buck Converter** to keep the rail at a steady **5V**, the NE5532P will perform beautifully as long as your audio signal stays centered at the **2.5V Virtual Ground**.
+## 3. OPL2 Hardware Interface (YM3812 & YM3014B)
+Based on corrected Application Manual specs.
 
-### 5. Final Hardware "Gotcha" - Quiescent Current
-Even with the switch OFF, the **BMS** and the **TP5100** (when unplugged) will draw a tiny, microscopic amount of current from the battery (microamps). 
-*   **Storage:** If you plan to leave the synth in a closet for 6 months, it's best to physically disconnect the batteries or add a "Kill Switch" directly on the battery line. 
-*   **Daily Use:** For everyday use, the current setup is perfect—just like a modern laptop or a boutique synth.
+### A. YM3812 (OPL2)
+*   **Pin 1:** **Vcc (+5V)**
+*   **Pin 3:** **Reset (IC)** $\leftarrow$ Pico GP17
+*   **Pin 4:** **A0** $\leftarrow$ Pico GP0
+*   **Pin 5:** **WR** $\leftarrow$ Pico GP10
+*   **Pin 6:** **RD** $\rightarrow$ **Tie to 5V** (Disable Read)
+*   **Pin 7:** **CS** $\leftarrow$ Pico GP11
+*   **Pin 10–18:** **Data Bus D0–D7** $\leftarrow$ Shifter $\leftarrow$ **Pico GP2–GP9**
+*   **Pin 12:** **Vss (GND)**
+*   **Pin 20:** **SH (S&H)** $\rightarrow$ YM3014B Pin 3
+*   **Pin 21:** **MO (Data)** $\rightarrow$ YM3014B Pin 4
+*   **Pin 22:** **SY (Sync)** $\rightarrow$ YM3014B Pin 5
+*   **Pin 24:** **phiM (Clock)** $\leftarrow$ Pico GP21
 
-**Next Step:** You have the full bill of materials and the wiring logic. Once the parts arrive, start by building the **Power Path** on a piece of perfboard and verify you get a clean 5V from the Buck Converter before plugging in the expensive OPL2 chip!
-
-
----
-
-# 🎹 Pico OPL2 Synth: Master Wiring Guide
-
-## 1. Power Path & Charging System
-This system allows the synth to run off a **12V DC Jack**, charge the **2S Battery**, and automatically switch to battery power when unplugged without a reboot.
-
-### A. DC Input & Charging
-*   **DC Jack (Center +):** Connect to **TP5100 VIN+** AND the **Anode** of a 1N5822 Schottky Diode.
-*   **DC Jack (GND):** Connect to **Common Ground Plane**.
-*   **TP5100 "SET" Pads:** Solder these together (Short) to enable **2S (8.4V) Mode**.
-*   **TP5100 BAT+:** Connect to **BMS P+** (Battery Positive).
-*   **TP5100 GND:** Connect to **Common Ground Plane**.
-
-### B. Power Path (Automatic Switching)
-This circuit uses a P-Channel MOSFET as a "gatekeeper" for the battery.
-*   **IRF4905 MOSFET Source (Pin 2/Tab):** Connect to **BMS P+** (Battery Positive).
-*   **IRF4905 MOSFET Drain (Pin 3):** Connect to the **LM2596 Input+**.
-*   **IRF4905 MOSFET Gate (Pin 1):** Connect to the **12V DC Jack (Center +)**.
-*   **Gate Resistor:** Connect a **100kΩ resistor** from **Gate (Pin 1)** to **Ground**.
-*   **Blocking Diode:** The 1N5822 Schottky Diode (from step A) cathode goes to **LM2596 Input+**.
-
-> **How it works:** When 12V is plugged in, the MOSFET Gate goes HIGH, turning the battery path OFF. The 12V flows through the diode to the buck converter. When unplugged, the 100k resistor pulls the Gate LOW, turning the battery path ON instantly.
+### B. YM3014B (DAC)
+*   **Pin 1:** **Vdd (+5V)**
+*   **Pin 2:** **Buff (Audio)** $\rightarrow$ 1kΩ Resistor $\rightarrow$ NE5532P Pin 3
+*   **Pin 7 & 8 (RB/MP):** **Jumper together** + **10µF Ceramic Cap to Ground**.
 
 ---
 
-## 2. Main Logic & Control (Pico)
+## 4. High-Fidelity Audio Chain (NE5532P)
+Using two dual op-amps for buffering, mixing, and line-out.
 
-### A. OPL2 Data Bus (via 74LVC245)
-*   **Pico GP0–GP7:** Connect to **74LVC245 Pins A1–A8**.
-*   **74LVC245 Pins B1–B8:** Connect to **YM3812 Pins 10, 11, 13, 14, 15, 16, 17, 18** (D0–D7).
-*   **74LVC245 Pin 1 (DIR):** Tie to **3.3V**.
-*   **74LVC245 Pin 19 (OE):** Tie to **GND**.
-*   **74LVC245 Pin 20 (VCC):** Tie to **3.3V**.
-
-### B. OPL2 Control Lines
-*   **GP8:** **YM3812 Pin 4 (A0)**
-*   **GP9:** **YM3812 Pin 5 (WR)**
-*   **GP10:** **YM3812 Pin 7 (CS)**
-*   **GP11:** **YM3812 Pin 3 (IC/Reset)**
-*   **GP21:** **YM3812 Pin 24 (phiM - Clock In)**
-
-### C. MIDI & UI
-*   **GP1 (UART0 RX):** Connect to **6N138 Pin 6** (with 4.7kΩ pull-up to 3.3V).
-*   **I2C0 SDA/SCL (GP12/GP13):** Connect to **20x4 LCD Backpack**.
-*   **Rotary Encoder A/B:** Connect to **GP14 / GP15**.
-*   **Rotary Encoder Button:** Connect to **GP16**.
+1.  **Virtual Ground (VREF):** 10k/10k Resistor divider from 5V to GND. Output (2.5V) goes to NE5532P Non-inverting inputs.
+2.  **The Mixer:** OPL2 audio and Line-In audio enter **NE5532P Pin 2** via **10kΩ resistors**.
+3.  **The Class-A Mod:** Connect a **4.7kΩ resistor** from **NE5532P Pin 1 (Output)** to **Ground**.
+4.  **The Line-Out:** Output from Pin 1 $\rightarrow$ **(+) 10µF Muse Cap (-)** $\rightarrow$ **10k/1k Voltage Divider**.
+5.  **The Amp:** Tap signal from before the divider to feed the **Volume Pot** $\rightarrow$ **PAM8406**.
 
 ---
 
-## 3. High-Fidelity Audio (NE5532P)
-The **NE5532P** replaces the LM358 for superior audio. We use it as a **Summing Mixer** to allow a "Line-In" for other gear.
-
-### A. Virtual Ground (VREF)
-*   Create a 2.5V reference using two **10kΩ resistors** in series from 5V to GND.
-*   Connect the center tap to **NE5532P Pin 3 and Pin 5** (Non-inverting inputs).
-*   Add a **10µF cap** from this tap to Ground for stability.
-
-### B. Mixer & Line-In (IC 1)
-*   **OPL2 Audio (YM3014B Pin 2):** Connect via **10kΩ resistor** to **NE5532P Pin 2**.
-*   **Line-In (Left/Right):** Connect via **10kΩ resistor** to **NE5532P Pin 2**.
-*   **Feedback:** Connect a **10kΩ resistor** between **NE5532P Pin 1 and Pin 2**.
-*   **Class-A Bias:** Connect a **4.7kΩ resistor** from **Pin 1 to Ground**.
-
-### C. Output to Amp
-*   **NE5532P Pin 1:** Connect to **(+) 10µF Muse Cap (-)** $\rightarrow$ **Volume Pot Pin 3**.
-*   **Volume Pot Pin 2 (Wiper):** Connect to **PAM8406 Input**.
-*   **Volume Pot Pin 1:** Connect to **Audio Ground**.
+## 5. MIDI Input (Optocoupler Isolation)
+*   **MIDI Jack Pin 4:** $\rightarrow$ 220Ω Resistor $\rightarrow$ **6N138 Pin 2**.
+*   **MIDI Jack Pin 5:** $\rightarrow$ **6N138 Pin 3**.
+*   **6N138 Pin 8:** **5V (Vcc)**.
+*   **6N138 Pin 6:** **Pico GP1** AND **4.7kΩ Resistor to 3.3V**.
+*   **6N138 Pin 5:** **Ground**.
 
 ---
 
-## 4. MIDI Input (Optocoupler)
-This circuit isolates your Pico from the electrical noise of the keyboard.
-
-*   **MIDI Jack Pin 4:** Connect to **220Ω Resistor** $\rightarrow$ **6N138 Pin 2**.
-*   **MIDI Jack Pin 5:** Connect to **6N138 Pin 3**.
-*   **1N4148 Diode:** Connect between **6N138 Pin 2 (Anode)** and **Pin 3 (Cathode)**.
-*   **6N138 Pin 8 (VCC):** Connect to **5V** (gives the chip more speed).
-*   **6N138 Pin 5 (GND):** Connect to **Pico Ground**.
-*   **6N138 Pin 6 (VOUT):** Connect to **Pico GP1** AND **4.7kΩ Resistor to 3.3V**.
-*   **6N138 Pin 7:** Leave floating.
-
----
-
-## 5. Summary Pin Layout (YM3812 Master)
-*   **Pin 1:** **5V (VCC)**
-*   **Pin 3:** **Reset (IC)** from Pico GP11
-*   **Pin 4:** **A0** from Pico GP8
-*   **Pin 5:** **Write (WR)** from Pico GP9
-*   **Pin 6:** **Read (RD)** - Tie to **5V** (Disable)
-*   **Pin 7:** **Chip Select (CS)** from Pico GP10
-*   **Pin 10–18:** **Data Bus D0-D7** (Skipping Pin 12 GND)
-*   **Pin 12:** **Ground**
-*   **Pin 20:** **NC (No Connection)**
-*   **Pin 21:** **MO (Data out)** to YM3014B Pin 4
-*   **Pin 22:** **SH (S&H out)** to YM3014B Pin 3
-*   **Pin 23:** **phiSY (Clock out)** to YM3014B Pin 5
-*   **Pin 24:** **phiM (Master Clock In)** from Pico GP21
-
----
-
-### Final Hardware Pro-Tips:
-1.  **Star Ground:** Connect the GND of the PAM8406, the OPL2, and the Buck Converter to a **single central point** on your board.
-2.  **The Pi-Filter:** Place the **10µH Inductor** and **470µF Capacitors** immediately after the LM2596 output. All 5V logic and audio should pull power from *after* this filter.
-3.  **Twisted Pairs:** Twist the wires going from your Volume Pot to the PAM8406 and from the PAM8406 to the speakers to reduce EMI interference.
+### 💻 Software Implementation Tip:
+Because the Data Bus now starts at **GP2**, you must shift your data in your C code:
+```c
+// Shift 8-bit OPL2 data to Pico Pins GP2-GP9
+void write_bus(uint8_t val) {
+    gpio_put_masked(0x3FC, (uint32_t)val << 2);
+}
+```
