@@ -12,39 +12,43 @@ Transform the PicoOPL2 from a GPIO sound card into a **standalone MIDI synthesiz
 ### 1.1 Remove GPIO Interface Code ✅
 **Goal:** Remove all RP6502 GPIO communication code (no longer needed)
 
-- [ ] Remove `PIN_REQ` and `PIN_ACK` definitions
-- [ ] Remove `read_data_bus()` function
-- [ ] Remove all `#if !TEST_MODE` GPIO setup code
-- [ ] Remove external mode packet assembly code
-- [ ] Simplify `TEST_MODE` - it's now always enabled
-- [ ] Clean up main() to remove GPIO-specific initialization
+- [x] Remove `PIN_REQ` and `PIN_ACK` definitions
+- [x] Remove `read_data_bus()` function
+- [x] Remove all `#if !TEST_MODE` GPIO setup code
+- [x] Remove external mode packet assembly code
+- [x] Simplify `TEST_MODE` - it's now always enabled
+- [x] Clean up main() to remove GPIO-specific initialization
 
-**Files to modify:**
-- PicoOPL2.c
+**Status:** ✅ COMPLETE
+
+**Files modified:**
+- PicoOPL2.c - Removed all GPIO interface code, simplified to standalone mode
 
 ---
 
-### 1.2 Extract Voice Management to Separate Module
+### 1.2 Extract Voice Management to Separate Module ✅
 **Goal:** Move voice allocator functions into their own files
 
 Create `voice_manager.c` and `voice_manager.h`:
 
-- [ ] Move `OPLVoice` struct definition
-- [ ] Move `voices[9]` array
-- [ ] Move `note_counter` variable
-- [ ] Move `init_voices()` function
-- [ ] Move `allocate_voice()` function
-- [ ] Move `find_active_voice()` function
-- [ ] Move `apply_velocity()` function
-- [ ] Add proper header guards and includes
+- [x] Move `OPLVoice` struct definition
+- [x] Move `voices[9]` array
+- [x] Move `note_counter` variable
+- [x] Move `init_voices()` function
+- [x] Move `allocate_voice()` function
+- [x] Move `find_active_voice()` function
+- [x] Move `apply_velocity()` function
+- [x] Add proper header guards and includes
 
-**Files to create:**
-- voice_manager.c
-- voice_manager.h
+**Status:** ✅ COMPLETE
 
-**Files to modify:**
-- PicoOPL2.c (remove moved code, add include)
-- CMakeLists.txt (add voice_manager.c)
+**Files created:**
+- voice_manager.c - Voice allocation and management implementation
+- voice_manager.h - Public interface with function declarations
+
+**Files modified:**
+- PicoOPL2.c (removed ~100 lines, added include)
+- CMakeLists.txt (added voice_manager.c)
 
 ---
 

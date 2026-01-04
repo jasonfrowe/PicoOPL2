@@ -5,128 +5,14 @@
 #include "opl2_hardware.h"
 #include "opl2.h"
 #include "instruments.h"
+#include "voice_manager.h"
 #include "queue.h"
-
-// --- CONFIGURATION ---
-// Set to 1 to play internal Doom song
-// Set to 0 to listen to external device via GPIO
-#define TEST_MODE 1
-
-#if TEST_MODE
 #include "song_data.h"
-#endif
-
-// 2. External Interface Pins (if needed)
-#define PIN_REQ 27
-#define PIN_ACK 28
-
-// --- VOICE ALLOCATOR ---
-typedef struct {
-    bool active;
-    uint8_t midi_channel; // Which MIDI channel owns this voice?
-    uint8_t midi_note;    // Which note is playing?
-    uint32_t age;         // For "Note Stealing" (Simple LRU)
-} OPLVoice;
-
-OPLVoice voices[9];       // The 9 Physical OPL Channels
-uint32_t note_counter = 0; // Global clock for age tracking
 
 // Track the current Instrument assigned to each MIDI Channel
 uint8_t midi_ch_program[16] = {0};
 
 queue_t event_queue;
-
-void init_voices() {
-    for(int i=0; i<9; i++) {
-        voices[i].active = false;
-        voices[i].midi_channel = 255;
-        voices[i].midi_note = 0;
-        voices[i].age = 0;
-    }
-}
-
-// Find a physical voice to play this MIDI note
-int allocate_voice(uint8_t m_ch, uint8_t m_note) {
-    // 1. Check for Retrigger (Same note, same channel)
-    for(int i=0; i<9; i++) {
-        if (voices[i].active && voices[i].midi_channel == m_ch && voices[i].midi_note == m_note) {
-            voices[i].age = ++note_counter;
-            return i;
-        }
-    }
-
-    // 2. DRUM HANDLING (MIDI Ch 9 -> Physical Voice 8)
-    if (m_ch == 9) {
-        voices[8].active = true;
-        voices[8].midi_channel = 9;
-        voices[8].midi_note = m_note;
-        return 8;
-    }
-
-    // 3. MELODIC HANDLING (Find free voice 0-7)
-    for(int i=0; i<8; i++) {
-        if (!voices[i].active) {
-            voices[i].active = true;
-            voices[i].midi_channel = m_ch;
-            voices[i].midi_note = m_note;
-            voices[i].age = ++note_counter;
-            return i;
-        }
-    }
-
-    // 4. STEAL OLDEST (Voices 0-7 only)
-    int oldest_idx = 0;
-    uint32_t min_age = 0xFFFFFFFF;
-    for(int i=0; i<8; i++) {
-        if (voices[i].age < min_age) {
-            min_age = voices[i].age;
-            oldest_idx = i;
-        }
-    }
-    
-    voices[oldest_idx].midi_channel = m_ch;
-    voices[oldest_idx].midi_note = m_note;
-    voices[oldest_idx].age = ++note_counter;
-    return oldest_idx;
-}
-
-// Find which physical voice is playing this note to stop it
-int find_active_voice(uint8_t m_ch, uint8_t m_note) {
-    if (m_ch == 9) return 8; // Drums always Ch 8
-
-    for(int i=0; i<8; i++) {
-        if (voices[i].active && voices[i].midi_channel == m_ch && voices[i].midi_note == m_note) {
-            return i;
-        }
-    }
-    return -1; // Not found (maybe already stolen/stopped)
-}
-
-// --- AUDIO HELPERS ---
-void apply_velocity(uint8_t channel, uint8_t velocity) {
-    if (channel > 8) return;
-    
-    // Get the original patch carrier KSL/TL
-    uint8_t base_ksl = shadow_carrier_ksl[channel];
-    uint8_t base_tl  = base_ksl & 0x3F;      // Original TL from patch
-    uint8_t ksl_bits = base_ksl & 0xC0;      // KSL bits
-    
-    // Convert MIDI velocity (0-127) to OPL attenuation (0-63)
-    // Higher velocity = less attenuation (louder)
-    // Lower velocity = more attenuation (quieter)
-    uint8_t velocity_attenuation = (127 - velocity) >> 1;
-    
-    // Combine: base TL + velocity attenuation
-    // This gives us dynamic range based on MIDI velocity
-    uint8_t final_tl = base_tl + velocity_attenuation;
-    
-    // Clamp to valid OPL range
-    if (final_tl > 63) final_tl = 63;
-    
-    // Write to carrier TL register
-    uint8_t offsets[9] = {0, 1, 2, 8, 9, 10, 16, 17, 18};
-    opl2_write(0x43 + offsets[channel], ksl_bits | final_tl);
-}
 
 // --- CORE 1: THE AUDIO ENGINE ---
 void core1_entry() {
@@ -184,25 +70,6 @@ void core1_entry() {
     }
 }
 
-#if !TEST_MODE
-// --- CORE 0 HELPER: READ BUS ---
-uint8_t read_data_bus() {
-    uint32_t all_pins = gpio_get_all();
-    uint8_t data = 0;
-    
-    if (all_pins & (1<<16)) data |= 0x01;
-    if (all_pins & (1<<17)) data |= 0x02;
-    if (all_pins & (1<<18)) data |= 0x04;
-    if (all_pins & (1<<19)) data |= 0x08;
-    if (all_pins & (1<<20)) data |= 0x10;
-    if (all_pins & (1<<21)) data |= 0x20;
-    if (all_pins & (1<<22)) data |= 0x40;
-    if (all_pins & (1<<26)) data |= 0x80;
-    
-    return data;
-}
-#endif
-
 // --- MAIN ---
 int main() {
     stdio_init_all();
@@ -212,20 +79,8 @@ int main() {
     gpio_init(LED_PIN);
     gpio_set_dir(LED_PIN, GPIO_OUT);
 
-#if !TEST_MODE
-    // Interface Pins
-    uint data_pins[] = {16,17,18,19,20,21,22,26};
-    for(int i=0; i<8; i++) {
-        gpio_init(data_pins[i]);
-        gpio_set_dir(data_pins[i], GPIO_IN);
-    }
-    gpio_init(PIN_REQ); gpio_set_dir(PIN_REQ, GPIO_IN);
-    gpio_init(PIN_ACK); gpio_set_dir(PIN_ACK, GPIO_OUT);
-    gpio_put(PIN_ACK, 1);
-#endif
-
     // Init OPL2
-    printf("Booting PicoOPL2 Sound Card (Mode: %s)...\n", TEST_MODE ? "INTERNAL TEST" : "EXTERNAL");
+    printf("Booting PicoOPL2 Synthesizer...\n");
     sleep_ms(2000);
     
     opl2_clear();
@@ -240,8 +95,7 @@ int main() {
     queue_init(&event_queue, sizeof(SongEvent), 512);
     multicore_launch_core1(core1_entry);
 
-#if TEST_MODE
-    // --- INTERNAL JUKEBOX MODE ---
+    // --- INTERNAL SONG PLAYER ---
     while(true) {
         printf("Core 0: Feeding Queue...\n");
         gpio_put(LED_PIN, 1);
@@ -267,43 +121,4 @@ int main() {
         // Reload defaults for next loop
         load_drum_patch(8, 36);
     }
-
-#else
-    // --- EXTERNAL SOUND CARD MODE ---
-    printf("Ready for Data via GPIO.\n");
-
-    uint8_t buffer[6];
-    int byte_idx = 0;
-
-    while(true) {
-        // 1. Wait for REQ LOW
-        while(gpio_get(PIN_REQ) == 1) tight_loop_contents();
-
-        // 2. Read
-        uint8_t byte = read_data_bus();
-        buffer[byte_idx++] = byte;
-
-        // 3. ACK LOW
-        gpio_put(PIN_ACK, 0);
-
-        // 4. Wait for REQ HIGH
-        while(gpio_get(PIN_REQ) == 0) tight_loop_contents();
-
-        // 5. ACK HIGH
-        gpio_put(PIN_ACK, 1);
-
-        // 6. Assemble Packet
-        if (byte_idx >= 6) {
-            SongEvent e;
-            e.type     = buffer[0];
-            e.delay_ms = (buffer[1] << 8) | buffer[2];
-            e.channel  = buffer[3];
-            e.note     = buffer[4];
-            e.velocity = buffer[5];
-            
-            queue_add_blocking(&event_queue, &e);
-            byte_idx = 0;
-        }
-    }
-#endif
 }

@@ -40,6 +40,7 @@ PicoOPL2.c
 opl2_hardware.c 
 opl2.c
 instruments.c
+voice_manager.c
 )
 
 pico_set_program_name(PicoOPL2 "PicoOPL2")
