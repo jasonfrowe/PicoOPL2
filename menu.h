@@ -56,4 +56,11 @@ void menu_update_voices(const bool voice_active[9]);
  */
 void menu_set_song_name(const char *name);
 
+/**
+ * Get selected MIDI channel
+ * 
+ * @return Selected channel (0-8), or 255 for ALL channels
+ */
+uint8_t menu_get_selected_channel(void);
+
 #endif // MENU_H

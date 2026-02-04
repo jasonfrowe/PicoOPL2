@@ -64,6 +64,13 @@ int main() {
     
     // Main loop - update menu, song player, and MIDI input
     while (true) {
+        // Process MIDI immediately for tight timing
+        if (menu_get_mode() == MODE_MIDI_IN) {
+            midi_input_update();
+        } else {
+            song_player_update(LED_PIN);
+        }
+        
         // Update voice activity for menu display
         bool voice_states[9];
         get_voice_states(voice_states);
@@ -71,13 +78,7 @@ int main() {
         
         menu_update();
         
-        // Update appropriate input source based on mode
-        if (menu_get_mode() == MODE_SONG) {
-            song_player_update(LED_PIN);
-        } else {
-            midi_input_update();
-        }
-        
-        sleep_ms(10);  // 100Hz update rate
+        // Small delay to prevent CPU spinning
+        sleep_us(100);  // 100 microseconds = 10kHz update rate
     }
 }

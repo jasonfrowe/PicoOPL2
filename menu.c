@@ -104,12 +104,16 @@ static void render_display(void) {
     // Line 3: Volume/Octave or visualizer
     lcd_set_cursor(0, 2);
     if (current_mode == MODE_MIDI_IN) {
-        // Show patch name (selectable)
+        // Show patch name for selected channel
+        // Get the patch for the current channel (or channel 0 if ALL)
+        uint8_t display_channel = (selected_channel == CHANNEL_ALL) ? 0 : selected_channel;
+        uint8_t current_program = midi_get_program(display_channel);
+        
         char patch_name[15];
-        strncpy(patch_name, patch_names[selected_program], 14);
+        strncpy(patch_name, patch_names[current_program], 14);
         patch_name[14] = '\0';
         char prefix = (cursor_line == 2) ? '>' : ' ';
-        snprintf(line, sizeof(line), "%cP%03d:%-14s", prefix, selected_program, patch_name);
+        snprintf(line, sizeof(line), "%cP%03d:%-14s", prefix, current_program, patch_name);
     } else {
         // Show playing status
         bool is_playing = song_player_is_playing();
@@ -181,20 +185,21 @@ void menu_update(void) {
             menu_dirty = true;
         } else if (current_mode == MODE_MIDI_IN && cursor_line == 2 && patch_edit_mode) {
             // Adjust patch selection while in edit mode
-            int new_program = (int)selected_program + delta;
+            // Get starting point from current channel's program
+            uint8_t display_channel = (selected_channel == CHANNEL_ALL) ? 0 : selected_channel;
+            int new_program = (int)midi_get_program(display_channel) + delta;
             while (new_program < 0) new_program += 256;
             while (new_program > 255) new_program -= 256;
-            selected_program = (uint8_t)new_program;
             
-            // Update channel(s) with new program
+            // Update MIDI channel patches
             if (selected_channel == CHANNEL_ALL) {
-                // Set all 9 channels to this program
+                // Set all 9 MIDI channels to this patch
                 for (int i = 0; i < 9; i++) {
-                    midi_set_program(i, selected_program);
+                    midi_set_program(i, (uint8_t)new_program);
                 }
             } else {
-                // Set single channel
-                midi_set_program(selected_channel, selected_program);
+                // Set specific MIDI channel
+                midi_set_program(selected_channel, (uint8_t)new_program);
             }
             menu_dirty = true;
         } else {
@@ -271,8 +276,8 @@ void menu_update(void) {
         }
     }
     
-    // Update display at 10Hz or when dirty
-    if (menu_dirty || (now - last_update) > 100) {
+    // Update display at 20Hz or when dirty
+    if (menu_dirty || (now - last_update) > 50) {
         render_display();
         last_update = now;
         menu_dirty = false;
@@ -307,4 +312,8 @@ void menu_set_song_name(const char *name) {
     strncpy(song_name, name, 20);
     song_name[20] = '\0';
     menu_dirty = true;
+}
+
+uint8_t menu_get_selected_channel(void) {
+    return selected_channel;
 }

@@ -24,7 +24,8 @@ static void core1_entry(void) {
     
     while (true) {
         queue_remove_blocking(&event_queue, &event);
-            
+        
+        // Process this event
         if (event.delay_ms > 0) sleep_ms(event.delay_ms);
 
         switch (event.type) {
@@ -68,6 +69,45 @@ static void core1_entry(void) {
                 init_voices();
                 break;
         }
+        
+        // Process all other queued events immediately (batch process for tight timing)
+        while (queue_try_remove(&event_queue, &event)) {
+            // No delay for batched events - they arrived simultaneously
+            switch (event.type) {
+                case 0: // Note Off
+                {
+                    int voice = find_active_voice(event.channel, event.note);
+                    if (voice != -1) {
+                        opl2_note_off(voice);
+                        voices[voice].active = false;
+                    }
+                    break;
+                }
+
+                case 1: // Note On
+                {
+                    int voice = allocate_voice(event.channel, event.note);
+                    if (event.channel == 9) {
+                        load_drum_patch(voice, event.note);
+                    } else {
+                        uint8_t prog = midi_get_program(event.channel);
+                        load_gm_instrument(voice, prog);
+                    }
+                    apply_velocity(voice, event.velocity);
+                    opl2_note_on(voice, event.note);
+                    break;
+                }
+
+                case 3: // Program Change
+                    midi_set_program(event.channel, event.note);
+                    break;
+                    
+                case 2: // Reset
+                    for(int i=0; i<9; i++) opl2_note_off(i);
+                    init_voices();
+                    break;
+            }
+        }
     }
 }
 
@@ -82,7 +122,11 @@ void audio_engine_start(void) {
 }
 
 void audio_engine_add_event(const SongEvent *event) {
-    queue_add_blocking(&event_queue, event);
+    // Use non-blocking to avoid MIDI lag - drop events if queue is full
+    if (!queue_try_add(&event_queue, event)) {
+        // Queue full - this shouldn't happen with 512 slots, but prevents blocking
+        // Could add a counter here to track drops if needed
+    }
 }
 
 void audio_engine_flush(void) {
