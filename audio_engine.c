@@ -70,13 +70,54 @@ static void core1_entry(void) {
                 break;
         }
         
-        // Process all other queued events immediately (batch process for tight timing)
-        while (queue_try_remove(&event_queue, &event)) {
-            // No delay for batched events - they arrived simultaneously
-            switch (event.type) {
+        // Batch process ONLY zero-delay events (MIDI simultaneous notes)
+        // Events with delay_ms > 0 (from Song mode) must wait their turn
+        SongEvent peek_event;
+        while (queue_try_remove(&event_queue, &peek_event)) {
+            // If this event has a delay, put it back and stop batching
+            if (peek_event.delay_ms > 0) {
+                // Can't put it back, so we need to process it on next iteration
+                // This is a limitation - we'll just handle it next time through outer loop
+                // For now, add it back by processing with its delay
+                if (peek_event.delay_ms > 0) sleep_ms(peek_event.delay_ms);
+                
+                switch (peek_event.type) {
+                    case 0: {
+                        int voice = find_active_voice(peek_event.channel, peek_event.note);
+                        if (voice != -1) {
+                            opl2_note_off(voice);
+                            voices[voice].active = false;
+                        }
+                        break;
+                    }
+                    case 1: {
+                        int voice = allocate_voice(peek_event.channel, peek_event.note);
+                        if (peek_event.channel == 9) {
+                            load_drum_patch(voice, peek_event.note);
+                        } else {
+                            uint8_t prog = midi_get_program(peek_event.channel);
+                            load_gm_instrument(voice, prog);
+                        }
+                        apply_velocity(voice, peek_event.velocity);
+                        opl2_note_on(voice, peek_event.note);
+                        break;
+                    }
+                    case 3:
+                        midi_set_program(peek_event.channel, peek_event.note);
+                        break;
+                    case 2:
+                        for(int i=0; i<9; i++) opl2_note_off(i);
+                        init_voices();
+                        break;
+                }
+                break; // Stop batching - next event needs its delay
+            }
+            
+            // Zero-delay event - process immediately
+            switch (peek_event.type) {
                 case 0: // Note Off
                 {
-                    int voice = find_active_voice(event.channel, event.note);
+                    int voice = find_active_voice(peek_event.channel, peek_event.note);
                     if (voice != -1) {
                         opl2_note_off(voice);
                         voices[voice].active = false;
@@ -86,20 +127,20 @@ static void core1_entry(void) {
 
                 case 1: // Note On
                 {
-                    int voice = allocate_voice(event.channel, event.note);
-                    if (event.channel == 9) {
-                        load_drum_patch(voice, event.note);
+                    int voice = allocate_voice(peek_event.channel, peek_event.note);
+                    if (peek_event.channel == 9) {
+                        load_drum_patch(voice, peek_event.note);
                     } else {
-                        uint8_t prog = midi_get_program(event.channel);
+                        uint8_t prog = midi_get_program(peek_event.channel);
                         load_gm_instrument(voice, prog);
                     }
-                    apply_velocity(voice, event.velocity);
-                    opl2_note_on(voice, event.note);
+                    apply_velocity(voice, peek_event.velocity);
+                    opl2_note_on(voice, peek_event.note);
                     break;
                 }
 
                 case 3: // Program Change
-                    midi_set_program(event.channel, event.note);
+                    midi_set_program(peek_event.channel, peek_event.note);
                     break;
                     
                 case 2: // Reset

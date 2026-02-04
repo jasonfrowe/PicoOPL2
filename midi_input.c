@@ -110,6 +110,10 @@ void midi_input_init(void) {
 
 void midi_input_set_enabled(bool en) {
     enabled = en;
+    
+    // Enable or disable UART RX interrupt to prevent stray data interference
+    int uart_irq = MIDI_UART == uart0 ? UART0_IRQ : UART1_IRQ;
+    
     if (enabled) {
         printf("MIDI Input enabled\n");
         // Flush any old data
@@ -118,8 +122,23 @@ void midi_input_set_enabled(bool en) {
         }
         running_status = 0;
         data_byte_count = 0;
+        
+        // Enable interrupt
+        uart_set_irq_enables(MIDI_UART, true, false);
+        irq_set_enabled(uart_irq, true);
     } else {
         printf("MIDI Input disabled\n");
+        
+        // Disable interrupt to prevent interference
+        irq_set_enabled(uart_irq, false);
+        uart_set_irq_enables(MIDI_UART, false, false);
+        
+        // Flush any pending data
+        while (uart_is_readable(MIDI_UART)) {
+            uart_getc(MIDI_UART);
+        }
+        running_status = 0;
+        data_byte_count = 0;
     }
 }
 
