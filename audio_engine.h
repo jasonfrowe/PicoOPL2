@@ -32,4 +32,10 @@ void audio_engine_start(void);
  */
 void audio_engine_add_event(const SongEvent *event);
 
+/**
+ * Flush all pending events from the queue
+ * Useful when pausing to prevent queued notes from playing
+ */
+void audio_engine_flush(void);
+
 #endif // AUDIO_ENGINE_H

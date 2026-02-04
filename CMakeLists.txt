@@ -44,6 +44,9 @@ voice_manager.c
 midi_state.c
 audio_engine.c
 song_player.c
+lcd.c
+encoder.c
+menu.c
 )
 
 pico_set_program_name(PicoOPL2 "PicoOPL2")
@@ -59,11 +62,7 @@ target_link_libraries(PicoOPL2
         pico_multicore
         hardware_pwm
         hardware_clocks
-)
-
-# Add the standard include files to the build
-target_include_directories(PicoOPL2 PRIVATE
-        ${CMAKE_CURRENT_LIST_DIR}
+        hardware_i2c
 )
 
 pico_add_extra_outputs(PicoOPL2)

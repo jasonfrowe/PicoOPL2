@@ -93,3 +93,13 @@ void opl2_clear() {
     // Clear shadow memory too
     for (int i = 0; i < 9; i++) shadow_b0[i] = 0;
 }
+
+void opl2_silence_all() {
+    // Turn off all 9 voices by clearing the KeyOn bit (0x20)
+    // but preserve the pitch information in shadow registers
+    for (int i = 0; i < 9; i++) {
+        // Write the shadow value which has KeyOn cleared
+        opl2_write(0xB0 + i, shadow_b0[i] & ~0x20);
+        // Don't clear shadow_b0 - keep the pitch data
+    }
+}

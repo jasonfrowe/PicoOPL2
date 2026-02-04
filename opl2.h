@@ -9,6 +9,7 @@ extern void opl2_note_on(uint8_t channel, uint8_t midi_note);
 extern void opl2_note_off(uint8_t channel);
 extern uint16_t midi_to_opl2_freq(uint8_t midi_note);
 extern void opl2_clear();
+extern void opl2_silence_all();
 
 // Shadow variables
 extern uint8_t shadow_b0[9];

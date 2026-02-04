@@ -102,3 +102,9 @@ void apply_velocity(uint8_t channel, uint8_t velocity) {
     uint8_t offsets[9] = {0, 1, 2, 8, 9, 10, 16, 17, 18};
     opl2_write(0x43 + offsets[channel], ksl_bits | final_tl);
 }
+
+void get_voice_states(bool voice_active[9]) {
+    for (int i = 0; i < 9; i++) {
+        voice_active[i] = voices[i].active;
+    }
+}

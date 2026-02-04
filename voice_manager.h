@@ -58,4 +58,11 @@ int find_active_voice(uint8_t m_ch, uint8_t m_note);
  */
 void apply_velocity(uint8_t channel, uint8_t velocity);
 
+/**
+ * Get voice activity states for UI display
+ * 
+ * @param voice_active Output array of 9 bools indicating active voices
+ */
+void get_voice_states(bool voice_active[9]);
+
 #endif // VOICE_MANAGER_H

@@ -84,3 +84,11 @@ void audio_engine_start(void) {
 void audio_engine_add_event(const SongEvent *event) {
     queue_add_blocking(&event_queue, event);
 }
+
+void audio_engine_flush(void) {
+    // Remove all pending events from the queue
+    SongEvent dummy;
+    while (queue_try_remove(&event_queue, &dummy)) {
+        // Keep removing until queue is empty
+    }
+}
