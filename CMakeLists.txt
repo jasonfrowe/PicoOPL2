@@ -44,6 +44,7 @@ voice_manager.c
 midi_state.c
 audio_engine.c
 song_player.c
+midi_input.c
 lcd.c
 encoder.c
 menu.c
@@ -63,6 +64,7 @@ target_link_libraries(PicoOPL2
         hardware_pwm
         hardware_clocks
         hardware_i2c
+        hardware_uart
 )
 
 pico_add_extra_outputs(PicoOPL2)

@@ -9,6 +9,7 @@
 #include "midi_state.h"
 #include "audio_engine.h"
 #include "song_player.h"
+#include "midi_input.h"
 #include "lcd.h"
 #include "encoder.h"
 #include "menu.h"
@@ -56,9 +57,12 @@ int main() {
     
     // Initialize song player
     song_player_init();
-    song_player_play();  // Auto-start in SONG mode
     
-    // Main loop - update menu and song player
+    // Initialize MIDI input
+    midi_input_init();
+    midi_input_set_enabled(true);  // Start in MIDI-IN mode
+    
+    // Main loop - update menu, song player, and MIDI input
     while (true) {
         // Update voice activity for menu display
         bool voice_states[9];
@@ -66,7 +70,14 @@ int main() {
         menu_update_voices(voice_states);
         
         menu_update();
-        song_player_update(LED_PIN);
+        
+        // Update appropriate input source based on mode
+        if (menu_get_mode() == MODE_SONG) {
+            song_player_update(LED_PIN);
+        } else {
+            midi_input_update();
+        }
+        
         sleep_ms(10);  // 100Hz update rate
     }
 }

@@ -27,6 +27,9 @@ extern uint8_t shadow_carrier_ksl[9];
 // Update a specific instrument in the bank at runtime
 void update_gm_patch(uint8_t program_number, const OPL_Patch* new_patch);
 
-extern OPL_Patch gm_bank[128];
+extern OPL_Patch gm_bank[256];
+
+// Patch name table (0-255)
+extern const char* const patch_names[256];
 
 #endif

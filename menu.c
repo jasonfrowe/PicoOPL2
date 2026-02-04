@@ -9,20 +9,26 @@
 #include "encoder.h"
 #include "instruments.h"
 #include "song_player.h"
+#include "midi_input.h"
+#include "midi_state.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
 
 // Menu state
-static menu_mode_t current_mode = MODE_SONG;
+static menu_mode_t current_mode = MODE_MIDI_IN;
 static uint8_t selected_channel = 0;  // 0-15 for MIDI channels
-static uint8_t selected_program = 0;  // 0-127 for GM patches
+static uint8_t selected_program = 0;  // 0-255 for patches
 static uint8_t volume = 127;
 static int8_t octave = 0;
 static bool voice_states[9] = {false};
 static char song_name[21] = "Doom E1M1";
 static uint32_t last_update = 0;
 static bool menu_dirty = true;
+static bool patch_edit_mode = false;
+static bool channel_edit_mode = false;
+
+#define CHANNEL_ALL 255  // Special value for "all channels"
 
 // Cursor position (which line is selected)
 static uint8_t cursor_line = 1;  // Start on line 2 (0-indexed: line 1)
@@ -78,19 +84,12 @@ static void render_display(void) {
     // Line 2: Channel info or Song name
     lcd_set_cursor(0, 1);
     if (current_mode == MODE_MIDI_IN) {
-        // Show MIDI channel and patch
-        char patch_name[15];
-        if (selected_program < 128) {
-            strncpy(patch_name, gm_patch_names[selected_program], 14);
-            patch_name[14] = '\0';
+        // Show MIDI channel (1-9 or ALL)
+        char prefix = (cursor_line == 1) ? '>' : ' ';
+        if (selected_channel == CHANNEL_ALL) {
+            snprintf(line, sizeof(line), "%cCh:ALL          ", prefix);
         } else {
-            strcpy(patch_name, "Unknown");
-        }
-        
-        if (cursor_line == 1) {
-            snprintf(line, sizeof(line), ">Ch%02d:[%-13s]", selected_channel + 1, patch_name);
-        } else {
-            snprintf(line, sizeof(line), " Ch%02d:[%-13s]", selected_channel + 1, patch_name);
+            snprintf(line, sizeof(line), "%cCh:%02d           ", prefix, selected_channel + 1);
         }
     } else {
         // Show song name
@@ -105,11 +104,12 @@ static void render_display(void) {
     // Line 3: Volume/Octave or visualizer
     lcd_set_cursor(0, 2);
     if (current_mode == MODE_MIDI_IN) {
-        if (cursor_line == 2) {
-            snprintf(line, sizeof(line), ">Vol:%3d Oct:%+2d    ", volume, octave);
-        } else {
-            snprintf(line, sizeof(line), " Vol:%3d Oct:%+2d    ", volume, octave);
-        }
+        // Show patch name (selectable)
+        char patch_name[15];
+        strncpy(patch_name, patch_names[selected_program], 14);
+        patch_name[14] = '\0';
+        char prefix = (cursor_line == 2) ? '>' : ' ';
+        snprintf(line, sizeof(line), "%cP%03d:%-14s", prefix, selected_program, patch_name);
     } else {
         // Show playing status
         bool is_playing = song_player_is_playing();
@@ -158,12 +158,55 @@ void menu_update(void) {
     // Handle encoder rotation - moves cursor up/down
     int delta = encoder_get_delta();
     if (delta != 0) {
-        // Move cursor
-        int new_cursor = cursor_line + delta;
-        if (new_cursor < 0) new_cursor = 3;
-        if (new_cursor > 3) new_cursor = 0;
-        cursor_line = new_cursor;
-        menu_dirty = true;
+        if (current_mode == MODE_MIDI_IN && cursor_line == 1 && channel_edit_mode) {
+            // Adjust channel selection while in edit mode (1-9 + ALL)
+            // Cycle through: 0, 1, 2, 3, 4, 5, 6, 7, 8, ALL
+            if (delta > 0) {
+                if (selected_channel == 8) {
+                    selected_channel = CHANNEL_ALL;
+                } else if (selected_channel == CHANNEL_ALL) {
+                    selected_channel = 0;
+                } else {
+                    selected_channel++;
+                }
+            } else {
+                if (selected_channel == 0) {
+                    selected_channel = CHANNEL_ALL;
+                } else if (selected_channel == CHANNEL_ALL) {
+                    selected_channel = 8;
+                } else {
+                    selected_channel--;
+                }
+            }
+            menu_dirty = true;
+        } else if (current_mode == MODE_MIDI_IN && cursor_line == 2 && patch_edit_mode) {
+            // Adjust patch selection while in edit mode
+            int new_program = (int)selected_program + delta;
+            while (new_program < 0) new_program += 256;
+            while (new_program > 255) new_program -= 256;
+            selected_program = (uint8_t)new_program;
+            
+            // Update channel(s) with new program
+            if (selected_channel == CHANNEL_ALL) {
+                // Set all 9 channels to this program
+                for (int i = 0; i < 9; i++) {
+                    midi_set_program(i, selected_program);
+                }
+            } else {
+                // Set single channel
+                midi_set_program(selected_channel, selected_program);
+            }
+            menu_dirty = true;
+        } else {
+            // Move cursor
+            int new_cursor = cursor_line + delta;
+            if (new_cursor < 0) new_cursor = 3;
+            if (new_cursor > 3) new_cursor = 0;
+            cursor_line = new_cursor;
+            patch_edit_mode = false;
+            channel_edit_mode = false;
+            menu_dirty = true;
+        }
     }
     
     // Handle encoder button - performs action on selected line
@@ -172,21 +215,37 @@ void menu_update(void) {
         // Short press: activate/adjust current line
         if (cursor_line == 0) {
             // MODE line - toggle mode
-            current_mode = (current_mode == MODE_SONG) ? MODE_MIDI_IN : MODE_SONG;
+            menu_mode_t new_mode = (current_mode == MODE_SONG) ? MODE_MIDI_IN : MODE_SONG;
+            
+            if (new_mode == MODE_MIDI_IN) {
+                // Switching to MIDI-IN: stop song player, enable MIDI input
+                song_player_pause();
+                midi_input_set_enabled(true);
+                patch_edit_mode = false;
+                channel_edit_mode = false;
+            } else {
+                // Switching to SONG: disable MIDI input, start song player
+                midi_input_set_enabled(false);
+                song_player_play();
+                patch_edit_mode = false;
+                channel_edit_mode = false;
+            }
+            
+            current_mode = new_mode;
             menu_dirty = true;
         }
         else if (cursor_line == 1) {
             if (current_mode == MODE_MIDI_IN) {
-                // Cycle through channels
-                selected_channel = (selected_channel + 1) % 16;
+                // Toggle channel edit mode
+                channel_edit_mode = !channel_edit_mode;
                 menu_dirty = true;
             }
             // In SONG mode, could skip to next song (future)
         }
         else if (cursor_line == 2) {
             if (current_mode == MODE_MIDI_IN) {
-                // Increase volume
-                volume = (volume + 10 > 127) ? 127 : volume + 10;
+                // Toggle patch edit mode
+                patch_edit_mode = !patch_edit_mode;
                 menu_dirty = true;
             } else {
                 // SONG mode: toggle play/pause
